@@ -21,6 +21,7 @@ members = [
     "config/config_builder",
     "config/generate_keypair",
     "consensus",
+    "consensus_model",
     "crypto/legacy_crypto",
     "crypto/nextgen_crypto",
     "crypto/secret_service",
