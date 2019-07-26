@@ -34,11 +34,6 @@ use types::{
     validator_verifier::ValidatorVerifier,
 };
 
-#[cfg(test)]
-#[path = "block_test.rs"]
-pub mod block_test;
-
-#[derive(Debug)]
 pub enum BlockVerificationError {
     /// The verification of quorum cert of this block failed.
     QCVerificationError(VoteMsgVerificationError),

@@ -13,7 +13,7 @@ use std::{
 };
 
 /// A reason for starting a new round: introduced for monitoring / debug purposes.
-#[derive(Eq, Debug, PartialEq)]
+#[derive(Eq, PartialEq)]
 pub enum NewRoundReason {
     QCReady,
     Timeout { cert: PacemakerTimeoutCertificate },
@@ -32,7 +32,7 @@ impl fmt::Display for NewRoundReason {
 /// NewRoundEvents are consumed by the rest of the system: they can cause sending new proposals
 /// or voting for some proposals that wouldn't have been voted otherwise.
 /// The duration is populated for debugging and testing
-#[derive(Debug, PartialEq, Eq)]
+#[derive(PartialEq, Eq)]
 pub struct NewRoundEvent {
     pub round: Round,
     pub reason: NewRoundReason,
