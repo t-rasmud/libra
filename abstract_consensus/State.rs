@@ -111,6 +111,38 @@ pub struct ConsensusState {
     preferred_block_round: Round,
 }
 
+pub struct Block<T> {
+    /// This block's id as a hash value
+    id: HashValue,
+    /// Parent block id of this block as a hash value (all zeros to indicate the genesis block)
+    parent_id: HashValue,
+    /// T of the block (e.g. one or more transaction(s)
+    payload: T,
+    /// The round of a block is an internal monotonically increasing counter used by Consensus
+    /// protocol.
+    round: Round,
+    /// The height of a block is its position in the chain (block height = parent block height + 1)
+    height: Height,
+    /// Contains the quorum certified ancestor and whether the quorum certified ancestor was
+    /// voted on successfully
+    quorum_cert: QuorumCert,
+    /// Author of the block that can be validated by the author's public key and the signature
+    author: Author,
+    /// Signature that the hash of this block has been authored by the owner of the private key
+    signature: Ed25519Signature,
+}
+
+pub struct QuorumCert {
+    /// The id of a block that is certified by this QuorumCertificate.
+    certified_block_id: HashValue,
+    /// The execution state of the corresponding block.
+    certified_state: ExecutedState,
+    /// The round of a certified block.
+    certified_block_round: Round,
+    /// The signed LedgerInfo of a committed block that carries the data about the certified block.
+    signed_ledger_info: LedgerInfoWithSignatures,
+}
+
 // Related traits
 
 /// Pacemaker is responsible for generating the new round events, which are driving the actions
