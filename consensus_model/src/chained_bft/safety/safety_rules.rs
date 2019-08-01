@@ -11,6 +11,7 @@ use crate::{
 };
 
 use crypto::HashValue;
+use mirai_annotations::{verify};
 use serde::{Deserialize, Serialize};
 use std::{
     fmt::{Display, Formatter},

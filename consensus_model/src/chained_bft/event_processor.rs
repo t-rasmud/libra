@@ -28,6 +28,7 @@ use crate::{
 };
 use crypto::HashValue;
 use logger::prelude::*;
+use mirai_annotations::{precondition, verify};
 use network::proto::BlockRetrievalStatus;
 use std::{
     sync::{Arc, RwLock},
@@ -400,7 +401,25 @@ impl<T: Payload, P: ProposerInfo> EventProcessor<T, P> {
     pub async fn process_winning_proposal(&self, proposal: ProposalInfo<T, P>) {
         let qc = proposal.proposal.quorum_cert();
         let update_res = self.safety_rules.write().unwrap().update(qc);
+
         if let Some(new_commit) = update_res {
+            // MIRAI: commit rule: round(B2) = round(B1) + 1 = round(B0) + 2
+//            let b2 = self
+//                .block_store
+//                .get_block(proposal.proposal.id())
+//                .expect("Block not found");
+//            let round_b2 = b2.round();
+//
+//            let b1 = self
+//                .block_store
+//                .get_block(b2.parent_id())
+//                .expect("Parent block not found");
+//            let round_b1 = b1.round();
+//
+//            let round_b0 = new_commit.round();
+//            precondition!(round_b2 == round_b1 + 1);
+//            precondition!(round_b2 == round_b0 + 2);
+
             let finality_proof = qc.ledger_info().clone();
             self.process_commit(new_commit, finality_proof).await;
         }
@@ -424,6 +443,8 @@ impl<T: Payload, P: ProposerInfo> EventProcessor<T, P> {
             }
             Ok(block) => block,
         };
+
+        verify!(block.round() == 0);
 
         // Checking pacemaker round again, because multiple proposal can now race
         // during async block retrieval
@@ -543,6 +564,29 @@ impl<T: Payload, P: ProposerInfo> EventProcessor<T, P> {
                 .potential_commit_id()
                 .unwrap_or_else(HashValue::zero)
         );
+
+        // MIRAI: Voting rule 1: block.round() > last_vote_round
+        let last_vote_round = self
+            .safety_rules
+            .read()
+            .unwrap()
+            .consensus_state()
+            .last_vote_round();
+        verify!(block.round() == last_vote_round);
+
+        // MIRAI: Voting rule 2: previous_round(B) >= locked_round
+//        let parent_block = self
+//            .block_store
+//            .get_block(block.parent_id())
+//            .expect("Parent block not found");
+//        let parent_block_round = parent_block.round();
+//        let locked_round = self
+//            .safety_rules
+//            .read()
+//            .unwrap()
+//            .consensus_state().preferred_block_round();
+//        verify!(parent_block_round >= locked_round);
+
         self.network.send_vote(vote_msg, recipients).await;
     }
 

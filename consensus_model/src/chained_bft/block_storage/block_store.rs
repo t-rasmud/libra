@@ -26,10 +26,6 @@ use std::{
 };
 use types::{ledger_info::LedgerInfo, validator_signer::ValidatorSigner};
 
-#[cfg(test)]
-#[path = "block_store_test.rs"]
-mod block_store_test;
-
 #[derive(Debug, PartialEq)]
 /// Whether we need to do block retrieval if we want to insert a Quorum Cert.
 pub enum NeedFetchResult {
