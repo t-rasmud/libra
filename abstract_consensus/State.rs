@@ -7,7 +7,6 @@ pub struct NodeState {
     sync_manager: SyncManager<T>,
     safety_rules: Arc<RwLock<SafetyRules<T>>>,
     block_store: Arc<BlockStore<T>>,
-    storage: Arc<dyn PersistentStorage<T>>,
 }
 
 // Structures contained in NodeState
@@ -32,9 +31,6 @@ pub struct BlockStore<T> {
     validator_signer: ValidatorSigner<Ed25519PrivateKey>,
     state_computer: Arc<dyn StateComputer<Payload = T>>,
     enforce_increasing_timestamps: bool,
-    /// The persistent storage backing up the in-memory data structure, every write should go
-    /// through this before in-memory tree.
-    storage: Arc<dyn PersistentStorage<T>>,
 }
 
 /// This structure maintains a consistent block tree of parent and children links. Blocks contain
@@ -82,7 +78,6 @@ pub struct BlockTree<T> {
 /// SyncManager is responsible for fetching dependencies and 'catching up' for given qc/ledger info
 pub struct SyncManager<T> {
     block_store: Arc<BlockStore<T>>,
-    storage: Arc<dyn PersistentStorage<T>>,
     network: ConsensusNetworkImpl,
     state_computer: Arc<dyn StateComputer<Payload = T>>,
     block_mutex_map: MutexMap<HashValue>,
@@ -199,35 +194,6 @@ pub trait ProposerElection<T, P> {
         &self,
         proposal: ProposalInfo<T, P>,
     ) -> Pin<Box<dyn Future<Output = ()> + Send>>;
-}
-
-/// Persistent storage is essential for maintaining safety when a node crashes.  Specifically,
-/// upon a restart, a correct node will not equivocate.  Even if all nodes crash, safety is
-/// guaranteed.  This trait also also supports liveness aspects (i.e. highest timeout certificate)
-/// and supports clean up (i.e. tree pruning).
-/// Blocks persisted are proposed but not yet committed.  The committed state is persisted
-/// via StateComputer.
-pub trait PersistentStorage<T>: PersistentLivenessStorage + Send + Sync {
-    /// Get an Arc to an instance of PersistentLivenessStorage
-    /// (workaround for trait downcasting
-    fn persistent_liveness_storage(&self) -> Box<dyn PersistentLivenessStorage>;
-
-    /// Persist the blocks and quorum certs into storage atomically.
-    fn save_tree(&self, blocks: Vec<Block<T>>, quorum_certs: Vec<QuorumCert>) -> Result<()>;
-
-    /// Delete the corresponding blocks and quorum certs atomically.
-    fn prune_tree(&self, block_ids: Vec<HashValue>) -> Result<()>;
-
-    /// Persist the consensus state.
-    fn save_consensus_state(&self, state: ConsensusState) -> Result<()>;
-
-    /// When the node restart, construct the instance and returned the data read from db.
-    /// This could guarantee we only read once during start, and we would panic if the
-    /// read fails.
-    /// It makes sense to be synchronous since we can't do anything else until this finishes.
-    fn start(config: &NodeConfig) -> (Arc<Self>, RecoveryData<T>)
-        where
-            Self: Sized;
 }
 
 // Local pacemaker

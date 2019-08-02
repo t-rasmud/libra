@@ -364,13 +364,7 @@ async fn process_winning_proposals(ProposalInfo<T, P>,
             }
             Ok(vote_info) => vote_info,
         };
-    if let Err(e) = self
-        .storage
-        .save_consensus_state(vote_info.consensus_state().clone())
-    {
-        debug!("Fail to persist consensus state: {:?}", e);
-        return;
-    }
+
     let proposal_id = vote_info.proposal_id();
     let executed_state = self
         .block_store
@@ -550,12 +544,6 @@ pub async fn process_outgoing_pacemaker_timeout(round: Round) -> Option<TimeoutM
         .write()
         .unwrap()
         .increase_last_vote_round(round);
-    if let Some(consensus_state) = consensus_state {
-        if let Err(e) = self.storage.save_consensus_state(consensus_state) {
-            error!("Failed to persist consensus state after increasing the last vote round due to {:?}", e);
-            return None;
-        }
-    }
 
     let last_vote_round = self
         .safety_rules
