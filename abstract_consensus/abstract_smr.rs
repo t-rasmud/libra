@@ -347,49 +347,6 @@ async fn process_votes(VoteMsg>,
         };
 }
 
-/// Upon receiving TimeoutMsg, ensure that any branches with higher quorum certificates are
-/// populated to this replica prior to processing the pacemaker timeout.  This ensures that when
-/// a pacemaker timeout certificate is formed with 2f+1 timeouts, the next proposer will be
-/// able to chain a proposal block to a highest quorum certificate such that all honest replicas
-/// can vote for it.
-async fn process_timeout_msg(TimeoutMsg,
-) {
-    let current_highest_quorum_cert_round = self
-        .block_store
-        .highest_quorum_cert()
-        .certified_block_round();
-    let new_round_highest_quorum_cert_round = timeout_msg
-        .highest_quorum_certificate()
-        .certified_block_round();
-
-    if current_highest_quorum_cert_round < new_round_highest_quorum_cert_round {
-        // The timeout message carries a QC higher than what this node has seen before:
-        // run state synchronization.
-        match self
-            .sync_manager
-            .sync_to(
-                SyncInfo {
-                    highest_ledger_info: timeout_msg.highest_ledger_info().clone(),
-                    highest_quorum_cert: timeout_msg.highest_quorum_certificate().clone(),
-                    peer: timeout_msg.author(),
-                },
-            )
-            .await
-            {
-                Ok(()) => debug!(
-                    "Successfully added new highest quorum certificate at round {} from old round {}",
-                    new_round_highest_quorum_cert_round, current_highest_quorum_cert_round
-                ),
-                Err(e) => warn!(
-                    "Unable to insert new highest quorum certificate {} from old round {} due to {:?}",
-                    timeout_msg.highest_quorum_certificate(),
-                    current_highest_quorum_cert_round,
-                    e
-                ),
-            }
-    }
-}
-
 // Daemons:
 
 //Propose only blocks that have been previously proposed? Random blocks?
@@ -409,11 +366,7 @@ impl pacemaker_daemon {
     async fn daemon() {
         current_round.inc();
         if (*) {
-            broadcast(TimeoutMsg::new(
-                self.block_store.highest_quorum_cert().as_ref().clone(),
-                self.block_store.highest_ledger_info().as_ref().clone(),
-                PacemakerTimeout::new(round, self.block_store.signer()),
-                self.block_store.signer()),
+            broadcast(NewRoundEvent),
             )
         }
     }
@@ -422,15 +375,6 @@ impl pacemaker_daemon {
     fn current_round(&self) -> Round {}
 
     fn update_highest_committed_round(&self, highest_committed_round: Round);
-}
-
-// Helper functions
-/// The function is invoked upon receiving a remote timeout message from another validator.
-fn process_remote_timeout(
-    &self,
-    pacemaker_timeout: PacemakerTimeout,
-) -> Pin<Box<dyn Future<Output = ()> + Send>> {
-    return update_current_round();
 }
 
 /// Combines highest_qc_certified_round, highest_local_tc and highest_received_tc into
