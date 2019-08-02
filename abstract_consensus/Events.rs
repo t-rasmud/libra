@@ -6,7 +6,6 @@ pub struct NewRoundEvent {
 pub struct ProposalInfo<T, P> {
     pub proposal: Block<T>,
     pub proposer_info: P,
-    pub timeout_certificate: Option<PacemakerTimeoutCertificate>,
     // use to notify about last committed block and the receiver could decide to start
     // a synchronization if it's behind
     pub highest_ledger_info: QuorumCert,
@@ -42,6 +41,12 @@ pub type Round = u64;
 pub enum NewRoundReason {
     QCReady,
     Timeout { cert: PacemakerTimeoutCertificate },
+}
+
+pub struct PacemakerTimeout {
+    round: Round,
+    author: Author,
+    signature: Ed25519Signature,
 }
 
 

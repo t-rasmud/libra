@@ -3,8 +3,6 @@
 pub struct NodeState {
     author: P,
     proposal_generator: ProposalGenerator<T>,
-    pacemaker: Arc<dyn Pacemaker>,
-    sync_manager: SyncManager<T>,
     safety_rules: Arc<RwLock<SafetyRules<T>>>,
     block_store: Arc<BlockStore<T>>,
 }
@@ -75,14 +73,6 @@ pub struct BlockTree<T> {
     max_pruned_blocks_in_mem: usize,
 }
 
-/// SyncManager is responsible for fetching dependencies and 'catching up' for given qc/ledger info
-pub struct SyncManager<T> {
-    block_store: Arc<BlockStore<T>>,
-    network: ConsensusNetworkImpl,
-    state_computer: Arc<dyn StateComputer<Payload = T>>,
-    block_mutex_map: MutexMap<HashValue>,
-}
-
 pub struct SafetyRules<T> {
     // To query about the relationships between blocks and QCs.
     block_tree: Arc<dyn BlockReader<Payload = T>>,
@@ -140,40 +130,6 @@ pub struct QuorumCert {
 
 // Related traits
 
-/// Pacemaker is responsible for generating the new round events, which are driving the actions
-/// of the rest of the system (e.g., for generating new proposals).
-/// Ideal pacemaker provides an abstraction of a "shared clock". In reality pacemaker
-/// implementations use external signals like receiving new votes / QCs plus internal
-/// communication between other nodes' pacemaker instances in order to synchronize the logical
-/// clocks.
-/// The trait doesn't specify the starting conditions or the executor that is responsible for
-/// driving the logic.
-pub trait Pacemaker: Send + Sync {
-    /// Returns deadline for current round
-    fn current_round_deadline(&self) -> Instant;
-
-    /// Synchronous function to return the current round.
-    fn current_round(&self) -> Round;
-
-    /// Function to update current round based on received certificates.
-    /// Both round of latest received QC and timeout certificates are taken into account.
-    /// This function guarantees to update pacemaker state when promise that it returns is fulfilled
-    fn process_certificates(
-        &self,
-        qc_round: Round,
-        timeout_certificate: Option<&PacemakerTimeoutCertificate>,
-    ) -> Pin<Box<dyn Future<Output = ()> + Send>>;
-
-    /// The function is invoked upon receiving a remote timeout message from another validator.
-    fn process_remote_timeout(
-        &self,
-        pacemaker_timeout: PacemakerTimeout,
-    ) -> Pin<Box<dyn Future<Output = ()> + Send>>;
-
-    /// Update the highest committed round
-    fn update_highest_committed_round(&self, highest_committed_round: Round);
-}
-
 /// ProposerElection incorporates the logic of choosing a leader among multiple candidates.
 /// We are open to a possibility for having multiple proposers per round, the ultimate choice
 /// of a proposal is exposed by the election protocol via the stream of proposals.
@@ -194,49 +150,4 @@ pub trait ProposerElection<T, P> {
         &self,
         proposal: ProposalInfo<T, P>,
     ) -> Pin<Box<dyn Future<Output = ()> + Send>>;
-}
-
-// Local pacemaker
-/// `LocalPacemakerInner` is a Pacemaker implementation that relies on increasing local timeouts
-/// in order to eventually come up with the timeout that is large enough to guarantee overlap of the
-/// "current round" of multiple participants.
-///
-/// The protocol is as follows:
-/// * `LocalPacemakerInner` manages the `highest_certified_round` that is keeping the round of the
-/// highest certified block known to the validator.
-/// * Once a new QC arrives with a round larger than that of `highest_certified_round`,
-/// local pacemaker is going to increment a round with a default timeout.
-/// * Upon every timeout `LocalPacemaker` increments a round and doubles the timeout.
-///
-/// `LocalPacemakerInner` does not require clock synchronization to maintain the property of
-/// liveness - although clock synchronization can improve the time necessary to get a large enough
-/// timeout overlap.
-/// It does rely on an assumption that when an honest replica receives a quorum certificate
-/// indicating to move to the next round, all other honest replicas will move to the next round
-/// within a bounded time. This can be guaranteed via all honest replicas gossiping their highest
-/// QC to f+1 other replicas for instance.
-struct LocalPacemakerInner {
-    // Determines the time interval for a round interval
-    time_interval: Box<dyn PacemakerTimeInterval>,
-    // Highest round that a block was committed
-    highest_committed_round: Round,
-    // Highest round known certified by QC.
-    highest_qc_round: Round,
-    // Current round (current_round - highest_qc_round determines the timeout).
-    // Current round is basically max(highest_qc_round, highest_received_tc, highest_local_tc) + 1
-    // update_current_round take care of updating current_round and sending new round event if
-    // it changes
-    current_round: Round,
-    // Approximate deadline when current round ends
-    current_round_deadline: Instant,
-    // Service for timer
-    time_service: Arc<dyn TimeService>,
-    // To send new round events.
-    new_round_events_sender: channel::Sender<NewRoundEvent>,
-    // To send timeout events to itself.
-    local_timeout_sender: channel::Sender<Round>,
-    // To send timeout events to other pacemakers
-    external_timeout_sender: channel::Sender<Round>,
-    // Manages the PacemakerTimeout and PacemakerTimeoutCertificate structs
-    pacemaker_timeout_manager: PacemakerTimeoutManager,
 }
