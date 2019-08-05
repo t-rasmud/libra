@@ -12,14 +12,6 @@ pub struct ProposalGenerator<T> {
     // Block store is queried both for finding the branch to extend and for generating the
     // proposed block.
     block_store: Arc<dyn BlockReader<Payload = T> + Send + Sync>,
-    // Transaction manager is delivering the transactions.
-    txn_manager: Arc<dyn TxnManager<Payload = T>>,
-    // Time service to generate block timestamps
-    time_service: Arc<dyn TimeService>,
-    // Max number of transactions to be added to a proposed block.
-    max_block_size: u64,
-    // Support increasing block timestamps
-    enforce_increasing_timestamps: bool,
     // Last round that a proposal was generated
     last_round_generated: Mutex<Round>,
 }
