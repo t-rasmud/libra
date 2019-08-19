@@ -25,7 +25,9 @@ fn hash(_bl: Block) -> BlockId {
     return res;
 }
 
-const ROOT: BlockId = 0;               // root of block tree
+// root of block tree
+const ROOT: BlockId = 0;
+// ids of honest replicas (1..h)
 type HonestReplicaId = usize;
 
 // id of the latest globally-committed block
@@ -157,12 +159,12 @@ async fn async_update(blocks: [Block; NUM_BLOCKS], r: HonestReplicaId, replica_s
 }
 
 fn extends(blocks: [Block; NUM_BLOCKS], child_block_id: BlockId, parent_block_id: BlockId) -> bool {
-    if child_block_id < ROOT || parent_block_id < ROOT {
-        return false;
-    }
     if child_block_id == parent_block_id ||
         blocks[child_block_id].parent == parent_block_id {
         return true;
+    }
+    if child_block_id < ROOT || parent_block_id < ROOT {
+        return false;
     }
     return extends(blocks, blocks[child_block_id].parent, parent_block_id);
 }
