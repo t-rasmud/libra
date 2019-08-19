@@ -1,8 +1,7 @@
 #![feature(async_await)]
-use mirai_annotations::{assume};
+use mirai_annotations::{assume, assumed_postcondition, precondition, result};
 use rand::Rng;
 
-// TODO: check
 const NUM_BLOCKS:usize = 10000;
 const NUM_REPLICAS:usize = 10000;
 
@@ -11,18 +10,18 @@ type BlockId = usize;
 #[derive(Copy, Clone, Hash)]
 struct Block {
     parent: BlockId,
+    // Distance from the root (genesis) block.
     height: usize,
-    // BlockId for which QC has been gathered.
+    // BlockId for which QC has been gathered and is
+    // known to the leader that's proposing this block.
     justify: BlockId,
+    // Unique id for this block.
+    id: BlockId,
 }
 
-// Returns a random number between 0 and NUM_BLOCKS.
 // axiom forall id: BlockId. Hash(blocks[id]) == id
-// checked at use site.
-fn hash(_bl: Block) -> BlockId {
-    let mut rng = rand::thread_rng();
-    let res:usize = rng.gen_range(0, NUM_BLOCKS);
-    return res;
+fn hash(bl: Block) -> BlockId {
+    return bl.id;
 }
 
 // root of block tree
@@ -52,14 +51,15 @@ struct ReplicaState {
 // f: number of faulty replicas
 // h: number of honest replicas
 // blocks: constant set of blocks
+// TODO: reference arrays
 fn main_method(f: usize, h: usize, blocks: [Block; NUM_BLOCKS]) {
     //axiom h >= 2f + 1
-    assume!(h >= 2*f + 1);
+    precondition!(h >= 2*f + 1);
     //axiom blocks[root].height == 0
-    assume!(blocks[ROOT].height == 0);
+    precondition!(blocks[ROOT].height == 0);
 
     // NUM_REPLICAS = h + f
-    assume!(NUM_REPLICAS == h + f);
+    precondition!(NUM_REPLICAS == h + f);
 
 //    set_model_field!(&modelVoteStore[root], numVotes, h + f);
 //    for i in 1..numBlocks {
@@ -69,12 +69,14 @@ fn main_method(f: usize, h: usize, blocks: [Block; NUM_BLOCKS]) {
     /// global model variables [TODO: convert these to model fields?]
     // all collected votes
     // initial value: lambda id: BlockId. if id == root then h+f else f (maximum equivocation)
+    //TODO: pass reference to struct
     let vote_store: & mut [usize; NUM_BLOCKS] = &mut [0; NUM_BLOCKS];
     vote_store[ROOT] = h + f;
     for i in 1..NUM_BLOCKS {
         vote_store[i] = f;
     }
 
+    //TODO: pass reference to struct
     let replica_store: & mut [ReplicaState; NUM_REPLICAS] =
         &mut [ReplicaState{vheight: 0, locked_block_id: ROOT, locally_committed: ROOT }; NUM_REPLICAS];
 
@@ -85,16 +87,18 @@ fn main_method(f: usize, h: usize, blocks: [Block; NUM_BLOCKS]) {
 }
 
 fn havoc_replica(max_replicas: usize) -> HonestReplicaId {
-    let mut rng = rand::thread_rng();
-    let res:usize = rng.gen_range(0, max_replicas);
+    let res = result!();
+    assumed_postcondition!(res <= max_replicas);
     return res;
 }
 
 fn havoc_block_id() -> BlockId {
-    let mut rng = rand::thread_rng();
-    let res:usize = rng.gen_range(1, NUM_BLOCKS);
+    let res = result!();
+    assumed_postcondition!(res >= 1 && res <= NUM_BLOCKS);
     return res;
 }
+
+//TODO: remove async (introduce later + static contracts)
 
 async fn async_main(f: usize, h: usize, blocks: [Block; NUM_BLOCKS],
                     replica_store: & mut [ReplicaState; NUM_REPLICAS],
@@ -112,10 +116,11 @@ async fn on_receive_proposal(h: usize, f: usize, blocks: [Block; NUM_BLOCKS], r:
     new_block = blocks[new_block_id];
 
     //axiom forall id: BlockId. id == ROOT || blocks[id].height == blocks[blocks[id].parent].height + 1
-    assume!(new_block_id == ROOT || blocks[new_block_id].height == blocks[blocks[new_block_id].parent].height + 1);
+    // TODO: define a function that returns the invariant, that should return true
+    precondition!(new_block_id == ROOT || blocks[new_block_id].height == blocks[blocks[new_block_id].parent].height + 1);
 
     let mut rng = rand::thread_rng();
-    let havoc_bool:bool = rng.gen();
+    let havoc_bool:bool = rng.gen(); // TODO: this should be a function (result!)
 
     if havoc_bool && vote_store[new_block.justify] >= h {
         if new_block.height > replica_store[r].vheight &&
