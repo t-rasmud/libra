@@ -109,7 +109,6 @@ async fn async_main(f: usize, h: usize, blocks: [Block; NUM_BLOCKS], replica_sto
 }
 
 /// top-level event handler at a replica to update vheight and "send" vote
-
 async fn on_receive_proposal(h: usize, f: usize, blocks: [Block; NUM_BLOCKS], r: HonestReplicaId,
                            replica_store: & mut [ReplicaState; NUM_REPLICAS], new_block_id : BlockId) {
     let new_block: Block;
@@ -118,10 +117,10 @@ async fn on_receive_proposal(h: usize, f: usize, blocks: [Block; NUM_BLOCKS], r:
     //axiom forall id: BlockId. id == ROOT || blocks[id].height == blocks[blocks[id].parent].height + 1
     assume!(new_block_id == ROOT || blocks[new_block_id].height == blocks[blocks[new_block_id].parent].height + 1);
 
-    unsafe{
-        let mut rng = rand::thread_rng();
-        let havoc_bool:bool = rng.gen();
+    let mut rng = rand::thread_rng();
+    let havoc_bool:bool = rng.gen();
 
+    unsafe{
         if havoc_bool && VOTE_STORE[new_block.justify] >= h {
             if new_block.height > replica_store[r].vheight &&
                 (extends(blocks, new_block_id, replica_store[r].locked_block_id) ||
