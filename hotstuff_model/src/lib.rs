@@ -1,6 +1,5 @@
 #![feature(async_await)]
 use mirai_annotations::{assume, assumed_postcondition, precondition, result};
-use rand::Rng;
 
 const NUM_BLOCKS:usize = 10000;
 const NUM_REPLICAS:usize = 10000;
@@ -98,6 +97,10 @@ fn havoc_block_id() -> BlockId {
     return res;
 }
 
+fn havoc_bool() -> bool {
+    return result!();
+}
+
 //TODO: remove async (introduce later + static contracts)
 async fn async_main(f: usize, h: usize, blocks: [Block; NUM_BLOCKS],
                     replica_store: & mut [ReplicaState; NUM_REPLICAS],
@@ -115,13 +118,12 @@ async fn on_receive_proposal(h: usize, f: usize, blocks: [Block; NUM_BLOCKS], r:
     new_block = blocks[new_block_id];
 
     //axiom forall id: BlockId. id == ROOT || blocks[id].height == blocks[blocks[id].parent].height + 1
-    // TODO: define a function that returns the invariant, that should return true
+    // TODO: define a function that returns the invariant, that should be true
     precondition!(new_block_id == ROOT || blocks[new_block_id].height == blocks[blocks[new_block_id].parent].height + 1);
 
-    let mut rng = rand::thread_rng();
-    let havoc_bool:bool = rng.gen(); // TODO: this should be a function (result!)
+    let nondet_bool:bool = havoc_bool();
 
-    if havoc_bool && vote_store[new_block.justify] >= h {
+    if nondet_bool && vote_store[new_block.justify] >= h {
         if new_block.height > replica_store[r].vheight &&
             (extends(blocks, new_block_id, replica_store[r].locked_block_id) ||
                 blocks[new_block.justify].height > blocks[replica_store[r].locked_block_id].height) {
@@ -148,7 +150,6 @@ async fn async_update(blocks: [Block; NUM_BLOCKS], r: HonestReplicaId, replica_s
     assume!(hash(b) == id);
 
     assume!(hash(blocks[replica_store[r].locally_committed]) == replica_store[r].locally_committed);
-    assume!(hash(blocks[COMMITTED]) == COMMITTED);
 
     if b_prime.height > blocks[replica_store[r].locked_block_id].height {
         replica_store[r].locked_block_id = id_prime;
@@ -159,6 +160,7 @@ async fn async_update(blocks: [Block; NUM_BLOCKS], r: HonestReplicaId, replica_s
         replica_store[r].locally_committed = std::cmp::max(id, replica_store[r].locally_committed);
 
         unsafe{
+            assume!(hash(blocks[COMMITTED]) == COMMITTED);
             assert!(consistent(blocks, b, blocks[COMMITTED]));
             COMMITTED = std::cmp::max(id, COMMITTED);
         }
