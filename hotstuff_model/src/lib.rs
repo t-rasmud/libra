@@ -46,12 +46,16 @@ struct ReplicaState {
     locally_committed: BlockId,
 }
 
+struct VoteStore {
+    map_block_votes: &'static mut [usize; NUM_BLOCKS],
+}
+
 /// start things off
 // f: number of faulty replicas
 // h: number of honest replicas
 // blocks: constant set of blocks
 // TODO: reference arrays
-fn main(f: usize, h: usize, blocks: [Block; NUM_BLOCKS]) {
+fn main(f: usize, h: usize, blocks: [Block; NUM_BLOCKS], vote_store: VoteStore) {
     //axiom h >= 2f + 1
     precondition!(h >= 2*f + 1);
     //axiom blocks[root].height == 0
@@ -65,14 +69,13 @@ fn main(f: usize, h: usize, blocks: [Block; NUM_BLOCKS]) {
 //        set_model_field!(&modelVoteStore[i], numVotes, f);
 //    }
 
-    /// global model variables [TODO: convert these to model fields?]
+
+    // global model variables [TODO: convert these to model fields?]
     // all collected votes
     // initial value: lambda id: BlockId. if id == root then h+f else f (maximum equivocation)
-    //TODO: pass reference to struct
-    let vote_store: & mut [usize; NUM_BLOCKS] = &mut [0; NUM_BLOCKS];
-    vote_store[ROOT] = h + f;
+    vote_store.map_block_votes[ROOT] = h + f;
     for i in 1..NUM_BLOCKS {
-        vote_store[i] = f;
+        vote_store.map_block_votes[i] = f;
     }
 
     //TODO: pass reference to struct
@@ -107,8 +110,8 @@ fn block_invariant(blocks: [Block; NUM_BLOCKS], block_id: BlockId) -> bool {
 
 //TODO: introduce async + static contracts
 fn main_loop(f: usize, h: usize, blocks: [Block; NUM_BLOCKS],
-                    replica_store: & mut [ReplicaState; NUM_REPLICAS],
-                    vote_store: & mut [usize; NUM_BLOCKS]) {
+             replica_store: & mut [ReplicaState; NUM_REPLICAS],
+             vote_store: VoteStore) {
     let r = havoc_replica(h);
     let new_block_id = havoc_block_id();
     on_receive_proposal(h, f, blocks, r, replica_store, new_block_id, vote_store);
@@ -116,8 +119,8 @@ fn main_loop(f: usize, h: usize, blocks: [Block; NUM_BLOCKS],
 
 /// top-level event handler at a replica to update vheight and "send" vote
 fn on_receive_proposal(h: usize, f: usize, blocks: [Block; NUM_BLOCKS], r: HonestReplicaId,
-                           replica_store: & mut [ReplicaState; NUM_REPLICAS], new_block_id : BlockId,
-                             vote_store: & mut [usize; NUM_BLOCKS]) {
+                       replica_store: & mut [ReplicaState; NUM_REPLICAS], new_block_id : BlockId,
+                       vote_store: VoteStore) {
     let new_block: Block;
     new_block = blocks[new_block_id];
 
@@ -126,12 +129,12 @@ fn on_receive_proposal(h: usize, f: usize, blocks: [Block; NUM_BLOCKS], r: Hones
 
     let nondet_bool:bool = havoc_bool();
 
-    if nondet_bool && vote_store[new_block.justify] >= h {
+    if nondet_bool && vote_store.map_block_votes[new_block.justify] >= h {
         if new_block.height > replica_store[r].vheight &&
             (extends(blocks, new_block_id, replica_store[r].locked_block_id) ||
                 blocks[new_block.justify].height > blocks[replica_store[r].locked_block_id].height) {
             replica_store[r].vheight = new_block.height;
-            vote_store[new_block_id] = vote_store[new_block_id] + 1;
+            vote_store.map_block_votes[new_block_id] = vote_store.map_block_votes[new_block_id] + 1;
         }
     }
 
