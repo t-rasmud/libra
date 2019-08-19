@@ -99,7 +99,6 @@ fn havoc_block_id() -> BlockId {
 }
 
 //TODO: remove async (introduce later + static contracts)
-
 async fn async_main(f: usize, h: usize, blocks: [Block; NUM_BLOCKS],
                     replica_store: & mut [ReplicaState; NUM_REPLICAS],
                     vote_store: & mut [usize; NUM_BLOCKS]) {
@@ -147,6 +146,9 @@ async fn async_update(blocks: [Block; NUM_BLOCKS], r: HonestReplicaId, replica_s
     //axiom forall id: BlockId. Hash(blocks[id]) == id
     assume!(hash(b_prime) == id_prime);
     assume!(hash(b) == id);
+
+    assume!(hash(blocks[replica_store[r].locally_committed]) == replica_store[r].locally_committed);
+    assume!(hash(blocks[COMMITTED]) == COMMITTED);
 
     if b_prime.height > blocks[replica_store[r].locked_block_id].height {
         replica_store[r].locked_block_id = id_prime;
