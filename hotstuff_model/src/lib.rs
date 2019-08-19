@@ -50,12 +50,16 @@ struct VoteStore {
     map_block_votes: &'static mut [usize; NUM_BLOCKS],
 }
 
+struct ReplicaStore {
+    map_replica_state: &'static mut [ReplicaState; NUM_REPLICAS],
+}
+
 /// start things off
 // f: number of faulty replicas
 // h: number of honest replicas
 // blocks: constant set of blocks
 // TODO: reference arrays
-fn main(f: usize, h: usize, blocks: [Block; NUM_BLOCKS], vote_store: VoteStore) {
+fn main(f: usize, h: usize, blocks: [Block; NUM_BLOCKS], vote_store: VoteStore, replica_store: &mut ReplicaStore) {
     //axiom h >= 2f + 1
     precondition!(h >= 2*f + 1);
     //axiom blocks[root].height == 0
@@ -78,9 +82,9 @@ fn main(f: usize, h: usize, blocks: [Block; NUM_BLOCKS], vote_store: VoteStore) 
         vote_store.map_block_votes[i] = f;
     }
 
-    //TODO: pass reference to struct
-    let replica_store: & mut [ReplicaState; NUM_REPLICAS] =
-        &mut [ReplicaState{vheight: 0, locked_block_id: ROOT, locally_committed: ROOT }; NUM_REPLICAS];
+    for i in 0..NUM_REPLICAS {
+        replica_store.map_replica_state[i] = ReplicaState{vheight: 0, locked_block_id: ROOT, locally_committed: ROOT};
+    }      &mut [ReplicaState{vheight: 0, locked_block_id: ROOT, locally_committed: ROOT }; NUM_REPLICAS];
 
 
     let r = havoc_replica(h);
@@ -110,7 +114,7 @@ fn block_invariant(blocks: [Block; NUM_BLOCKS], block_id: BlockId) -> bool {
 
 //TODO: introduce async + static contracts
 fn main_loop(f: usize, h: usize, blocks: [Block; NUM_BLOCKS],
-             replica_store: & mut [ReplicaState; NUM_REPLICAS],
+             replica_store: &mut ReplicaStore,
              vote_store: VoteStore) {
     let r = havoc_replica(h);
     let new_block_id = havoc_block_id();
@@ -119,7 +123,7 @@ fn main_loop(f: usize, h: usize, blocks: [Block; NUM_BLOCKS],
 
 /// top-level event handler at a replica to update vheight and "send" vote
 fn on_receive_proposal(h: usize, f: usize, blocks: [Block; NUM_BLOCKS], r: HonestReplicaId,
-                       replica_store: & mut [ReplicaState; NUM_REPLICAS], new_block_id : BlockId,
+                       replica_store: &mut ReplicaStore, new_block_id : BlockId,
                        vote_store: VoteStore) {
     let new_block: Block;
     new_block = blocks[new_block_id];
@@ -130,10 +134,10 @@ fn on_receive_proposal(h: usize, f: usize, blocks: [Block; NUM_BLOCKS], r: Hones
     let nondet_bool:bool = havoc_bool();
 
     if nondet_bool && vote_store.map_block_votes[new_block.justify] >= h {
-        if new_block.height > replica_store[r].vheight &&
-            (extends(blocks, new_block_id, replica_store[r].locked_block_id) ||
-                blocks[new_block.justify].height > blocks[replica_store[r].locked_block_id].height) {
-            replica_store[r].vheight = new_block.height;
+        if new_block.height > replica_store.map_replica_state[r].vheight &&
+            (extends(blocks, new_block_id, replica_store.map_replica_state[r].locked_block_id) ||
+                blocks[new_block.justify].height > blocks[replica_store.map_replica_state[r].locked_block_id].height) {
+            replica_store.map_replica_state[r].vheight = new_block.height;
             vote_store.map_block_votes[new_block_id] = vote_store.map_block_votes[new_block_id] + 1;
         }
     }
@@ -144,7 +148,7 @@ fn on_receive_proposal(h: usize, f: usize, blocks: [Block; NUM_BLOCKS], r: Hones
 
 /// Internal event handler at a replica to update lockedBlockId, locallyCommitted, and committed
 /// and assert consensus safety
-fn update(blocks: [Block; NUM_BLOCKS], r: HonestReplicaId, replica_store: & mut [ReplicaState; NUM_REPLICAS], id_double_prime: BlockId) {
+fn update(blocks: [Block; NUM_BLOCKS], r: HonestReplicaId, replica_store: &mut ReplicaStore, id_double_prime: BlockId) {
     let b_double_prime = blocks[id_double_prime];
     let id_prime = b_double_prime.justify;
     let b_prime = blocks[id_prime];
@@ -155,15 +159,15 @@ fn update(blocks: [Block; NUM_BLOCKS], r: HonestReplicaId, replica_store: & mut 
     assume!(hash(b_prime) == id_prime);
     assume!(hash(b) == id);
 
-    assume!(hash(blocks[replica_store[r].locally_committed]) == replica_store[r].locally_committed);
+    assume!(hash(blocks[replica_store.map_replica_state[r].locally_committed]) == replica_store.map_replica_state[r].locally_committed);
 
-    if b_prime.height > blocks[replica_store[r].locked_block_id].height {
-        replica_store[r].locked_block_id = id_prime;
+    if b_prime.height > blocks[replica_store.map_replica_state[r].locked_block_id].height {
+        replica_store.map_replica_state[r].locked_block_id = id_prime;
     }
 
     if b_double_prime.parent == hash(b_prime) && b_prime.parent == hash(b) {
-        assert!(consistent(blocks, b, blocks[replica_store[r].locally_committed]));
-        replica_store[r].locally_committed = std::cmp::max(id, replica_store[r].locally_committed);
+        assert!(consistent(blocks, b, blocks[replica_store.map_replica_state[r].locally_committed]));
+        replica_store.map_replica_state[r].locally_committed = std::cmp::max(id, replica_store.map_replica_state[r].locally_committed);
 
         unsafe{
             assume!(hash(blocks[COMMITTED]) == COMMITTED);
