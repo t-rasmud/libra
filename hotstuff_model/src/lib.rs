@@ -51,7 +51,7 @@ struct ReplicaState {
 // h: number of honest replicas
 // blocks: constant set of blocks
 // TODO: reference arrays
-fn main_method(f: usize, h: usize, blocks: [Block; NUM_BLOCKS]) {
+fn main(f: usize, h: usize, blocks: [Block; NUM_BLOCKS]) {
     //axiom h >= 2f + 1
     precondition!(h >= 2*f + 1);
     //axiom blocks[root].height == 0
@@ -101,25 +101,28 @@ fn havoc_bool() -> bool {
     return result!();
 }
 
-//TODO: remove async (introduce later + static contracts)
-async fn async_main(f: usize, h: usize, blocks: [Block; NUM_BLOCKS],
+fn block_invariant(blocks: [Block; NUM_BLOCKS], block_id: BlockId) -> bool {
+    return block_id == ROOT || blocks[block_id].height == blocks[blocks[block_id].parent].height + 1;
+}
+
+//TODO: introduce async + static contracts
+fn main_loop(f: usize, h: usize, blocks: [Block; NUM_BLOCKS],
                     replica_store: & mut [ReplicaState; NUM_REPLICAS],
                     vote_store: & mut [usize; NUM_BLOCKS]) {
     let r = havoc_replica(h);
     let new_block_id = havoc_block_id();
-    on_receive_proposal(h, f, blocks, r, replica_store, new_block_id, vote_store).await;
+    on_receive_proposal(h, f, blocks, r, replica_store, new_block_id, vote_store);
 }
 
 /// top-level event handler at a replica to update vheight and "send" vote
-async fn on_receive_proposal(h: usize, f: usize, blocks: [Block; NUM_BLOCKS], r: HonestReplicaId,
+fn on_receive_proposal(h: usize, f: usize, blocks: [Block; NUM_BLOCKS], r: HonestReplicaId,
                            replica_store: & mut [ReplicaState; NUM_REPLICAS], new_block_id : BlockId,
                              vote_store: & mut [usize; NUM_BLOCKS]) {
     let new_block: Block;
     new_block = blocks[new_block_id];
 
     //axiom forall id: BlockId. id == ROOT || blocks[id].height == blocks[blocks[id].parent].height + 1
-    // TODO: define a function that returns the invariant, that should be true
-    precondition!(new_block_id == ROOT || blocks[new_block_id].height == blocks[blocks[new_block_id].parent].height + 1);
+    precondition!(block_invariant(blocks, new_block_id) == true);
 
     let nondet_bool:bool = havoc_bool();
 
@@ -132,13 +135,13 @@ async fn on_receive_proposal(h: usize, f: usize, blocks: [Block; NUM_BLOCKS], r:
         }
     }
 
-    async_update(blocks, r, replica_store, new_block.justify).await;
-    async_main(f, h, blocks, replica_store, vote_store);
+    update(blocks, r, replica_store, new_block.justify);
+    main_loop(f, h, blocks, replica_store, vote_store);
 }
 
 /// Internal event handler at a replica to update lockedBlockId, locallyCommitted, and committed
 /// and assert consensus safety
-async fn async_update(blocks: [Block; NUM_BLOCKS], r: HonestReplicaId, replica_store: & mut [ReplicaState; NUM_REPLICAS], id_double_prime: BlockId) {
+fn update(blocks: [Block; NUM_BLOCKS], r: HonestReplicaId, replica_store: & mut [ReplicaState; NUM_REPLICAS], id_double_prime: BlockId) {
     let b_double_prime = blocks[id_double_prime];
     let id_prime = b_double_prime.justify;
     let b_prime = blocks[id_prime];
