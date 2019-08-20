@@ -46,12 +46,39 @@ struct ReplicaState {
     locally_committed: BlockId,
 }
 
+// Map from a block id to its number of votes.
 struct VoteStore {
     map_block_votes: &'static mut [usize; NUM_BLOCKS],
 }
 
+// Map from a replica id to its state.
 struct ReplicaStore {
     map_replica_state: &'static mut [ReplicaState; NUM_REPLICAS],
+}
+
+// Returns an abstract value of f, the number of faulty replicas.
+fn get_f() -> usize {
+    return result!();
+}
+
+// Returns an abstract value of h, the number of honest replicas.
+fn get_h() -> usize {
+    return result!();
+}
+
+// Returns an abstract array of blocks.
+fn get_blocks() -> [Block; NUM_BLOCKS]{
+    return result!();
+}
+
+// Returns an abstract VoteStore.
+fn get_vote_store() -> VoteStore {
+    return result!();
+}
+
+// Returns an abstract ReplicaStore.
+fn get_replica_store() -> &'static mut ReplicaStore {
+    return result!();
 }
 
 /// start things off
@@ -59,7 +86,14 @@ struct ReplicaStore {
 // h: number of honest replicas
 // blocks: constant set of blocks
 // TODO: reference arrays
-fn main(f: usize, h: usize, blocks: [Block; NUM_BLOCKS], vote_store: VoteStore, replica_store: &mut ReplicaStore) {
+fn main() {
+
+    let f = get_f();
+    let h= get_h();
+    let blocks = get_blocks();
+    let vote_store = get_vote_store();
+    let replica_store = get_replica_store();
+
     //axiom h >= 2f + 1
     precondition!(h >= 2*f + 1);
     //axiom blocks[root].height == 0
