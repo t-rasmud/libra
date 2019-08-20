@@ -6,7 +6,7 @@ const NUM_REPLICAS:usize = 10000;
 
 type BlockId = usize;
 
-#[derive(Copy, Clone, Hash)]
+#[derive(Copy, Clone)]
 struct Block {
     parent: BlockId,
     // Distance from the root (genesis) block.
