@@ -33,7 +33,12 @@ use crate::{
         duration_since_epoch, wait_if_possible, TimeService, WaitingError, WaitingSuccess,
     },
 };
+use crypto::HashValue;
 use logger::prelude::*;
+use mirai_annotations::{
+    debug_checked_precondition, debug_checked_precondition_eq, debug_checked_verify,
+    debug_checked_verify_eq, get_model_field, set_model_field,
+};
 use network::proto::BlockRetrievalStatus;
 use std::{sync::Arc, time::Duration};
 use termion::color::*;
@@ -488,6 +493,19 @@ impl<T: Payload> EventProcessor<T> {
     /// 3. In case a validator chooses to vote, send the vote to the representatives at the next
     /// position.
     async fn process_proposed_block(&mut self, proposal: Block<T>) {
+        // Safety invariant: For any valid proposed block, its parent block == the block pointed to
+        // by its QC.
+        debug_checked_precondition_eq!(
+            proposal.parent_id(),
+            proposal.quorum_cert().certified_block_id()
+        );
+        // Safety invariant: QC of the parent block is present in the block store
+        // (Ensured by the call to pre-process proposal before this function is called).
+        debug_checked_precondition!(self
+            .block_store
+            .get_quorum_cert_for_block(proposal.parent_id())
+            .is_some());
+
         if let Some(time_to_receival) =
             duration_since_epoch().checked_sub(Duration::from_micros(proposal.timestamp_usecs()))
         {
@@ -495,6 +513,9 @@ impl<T: Payload> EventProcessor<T> {
         }
 
         let proposal_round = proposal.round();
+        let proposal_id = proposal.id();
+        let proposal_parent_id = proposal.parent_id();
+
         let vote_msg = match self.execute_and_vote(proposal).await {
             Err(_) => {
                 return;
@@ -502,12 +523,28 @@ impl<T: Payload> EventProcessor<T> {
             Ok(vote_msg) => vote_msg,
         };
 
+        // Safety invariant: The vote being sent is for the proposal that was received.
+        debug_checked_verify_eq!(proposal_id, vote_msg.proposed_block_id());
+        // Safety invariant: The last voted round is updated to be the same as the proposed block's
+        // round. At this point, the replica has decided to vote for the proposed block.
+        debug_checked_verify_eq!(
+            self.safety_rules.consensus_state().last_vote_round(),
+            proposal_round
+        );
+
         self.last_vote_sent
             .replace((vote_msg.clone(), proposal_round));
         let recipients = self
             .proposer_election
             .get_valid_proposers(proposal_round + 1);
         debug!("{}Voted: {} {}", Fg(Green), Fg(Reset), vote_msg);
+
+        // Safety invariant: The parent block must be present in the block store and the replica
+        // only votes for blocks with round greater than the parent block's round.
+        debug_checked_verify!(match self.block_store.get_block(proposal_parent_id) {
+            Some(parent_block) => parent_block.round() < proposal_round,
+            None => false,
+        });
         self.network.send_vote(vote_msg, recipients).await;
     }
 
@@ -695,10 +732,45 @@ impl<T: Payload> EventProcessor<T> {
                 error!("Error inserting qc {}: {:?}", qc, e);
                 return None;
             }
+
+            // Safety invariant: b1 <-- b2 <-- b3
+            // the preferred block round must be updated to b1's round.
+            debug_checked_verify!(
+                self.safety_rules.consensus_state().preferred_block_round()
+                    >= qc.certified_grandparent_block_round()
+            );
+
+            debug_checked_verify!(self.Reaches(
+                qc.certified_block_id(),
+                get_model_field!(self, last_committed_id)
+            ));
             self.process_certificates(qc.as_ref(), None).await;
             return Some(qc);
         };
         None
+    }
+
+    pub fn Reaches(&mut self, id1: HashValue, id2: HashValue) -> bool {
+        if id1 == id2 {
+            return true;
+        }
+        let b1 = self.block_store.get_block(id1);
+        let b2 = self.block_store.get_block(id2);
+        match b2 {
+            Some(block_b2) => match b1 {
+                Some(block_b1) => {
+                    let b2_parent = self.block_store.get_block(block_b2.parent_id());
+                    match b2_parent {
+                        Some(block_b2_parent) => {
+                            return self.Reaches(id1, block_b2_parent.id());
+                        }
+                        None => return false,
+                    }
+                }
+                None => return false,
+            },
+            None => return false,
+        }
     }
 
     /// Upon (potentially) new commit:
@@ -765,6 +837,8 @@ impl<T: Payload> EventProcessor<T> {
             }
         }
         counters::LAST_COMMITTED_ROUND.set(committed_block.round() as i64);
+        // Safety invariant:
+        set_model_field!(self, last_committed_id, committed_block.id());
         debug!("{}Committed{} {}", Fg(Blue), Fg(Reset), *committed_block);
         event!("committed",
             "block_id": committed_block.id().short_str(),

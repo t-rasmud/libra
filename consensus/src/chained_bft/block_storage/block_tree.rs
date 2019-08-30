@@ -14,7 +14,7 @@ use crate::{
 use canonical_serialization::CanonicalSerialize;
 use crypto::HashValue;
 use logger::prelude::*;
-use mirai_annotations::checked_verify_eq;
+use mirai_annotations::{checked_verify_eq, debug_checked_precondition};
 use serde::Serialize;
 use std::{
     collections::{
@@ -210,6 +210,16 @@ where
     }
 
     pub(super) fn insert_quorum_cert(&mut self, qc: QuorumCert) -> Result<(), BlockTreeError> {
+        // Safety invariant: No two distinct quorum certificates have the same round number.
+        // TODO: Fix description
+        //        debug_checked_precondition!({
+        //            let qc_round = qc.certified_block_round();
+        //            self.id_to_quorum_cert
+        //                .values()
+        //                .iter()
+        //                .all(|x| x == qc || x.certified_block_round() != qc_round);
+        //        });
+
         let block_id = qc.certified_block_id();
         let qc = Arc::new(qc);
         match self.id_to_block.get(&block_id) {
