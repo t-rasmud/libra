@@ -18,7 +18,7 @@ use crate::{
 use canonical_serialization::CanonicalSerialize;
 use crypto::{hash::CryptoHash, HashValue};
 use logger::prelude::*;
-use mirai_annotations::{checked_verify_eq, precondition};
+use mirai_annotations::{checked_verify_eq, debug_checked_precondition, precondition};
 use serde::Serialize;
 use std::{
     collections::{vec_deque::VecDeque, HashMap},
@@ -230,7 +230,7 @@ where
         // basic_commit_and_restart to fail (reaches() returns false due to the condition
         // id1 == self.root_id; NOTE: At the point of failure, self.root_id is not genesis due to
         // block pruning).
-        precondition!({
+        debug_checked_precondition!({
             if let Some(mut tmp_qc) = self.id_to_quorum_cert.get(&self.highest_certified_block_id) {
                 let mut tmp_qc_parent_exists = true;
                 while tmp_qc.grandparent_block_round() + 2 != tmp_qc.certified_block_round()
